@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { fmt } from "@/lib/money";
+import { fmtDate } from "@/lib/utils";
 import { JournalForm } from "@/components/journal-form";
 import { PrintButton } from "@/components/print-button";
 
@@ -15,17 +16,18 @@ export default async function Page() {
     }),
   ]);
 
+  const parents = new Set(accounts.map((a) => a.parentId).filter(Boolean));
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold">سندات اليومية</h1>
-      <JournalForm accounts={accounts.map(({ id, code, nameAr }) => ({ id, code, nameAr }))} />
+      <JournalForm accounts={accounts.filter((a) => !parents.has(a.id)).map(({ id, code, nameAr }) => ({ id, code, nameAr }))} />
       {vouchers.map((v) => (
         <section key={v.id} id={`v-${v.id}`} className="card print-area space-y-3">
           <header className="flex items-start justify-between border-b pb-3">
             <div>
               <h2 className="font-bold text-navy">ذا سلكشن للحفلات الخارجية</h2>
               <p className="text-sm">سند يومية رقم <b>{v.voucherNo}</b></p>
-              <p className="text-xs text-gray-500">{v.date.toLocaleDateString("ar-SA")} — {v.description}</p>
+              <p className="text-xs text-gray-500">{fmtDate(v.date)} — {v.description}</p>
             </div>
             <PrintButton targetId={`v-${v.id}`} />
           </header>

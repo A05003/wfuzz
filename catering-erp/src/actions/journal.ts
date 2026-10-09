@@ -18,6 +18,8 @@ export async function postJournalVoucher(input: JournalVoucherInput): Promise<Ac
       const ids = Array.from(new Set(v.lines.map((l) => l.accountId)));
       const accounts = await tx.chartOfAccount.findMany({ where: { id: { in: ids } } });
       if (accounts.length !== ids.length) throw new Error("حساب غير موجود");
+      const parentCount = await tx.chartOfAccount.count({ where: { parentId: { in: ids } } });
+      if (parentCount > 0) throw new Error("لا يمكن الترحيل على حساب رئيسي");
       const byId = new Map(accounts.map((a) => [a.id, a]));
 
       const count = await tx.journalVoucher.count();

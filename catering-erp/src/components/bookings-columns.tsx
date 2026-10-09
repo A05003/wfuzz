@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { fmt } from "@/lib/money";
+import { fmtDate } from "@/lib/utils";
 
 export type BookingRow = {
   id: string; bookingNumber: string; eventType: string; eventDate: string; customer: string;
@@ -17,7 +18,7 @@ export const createColumnDef = (): ColumnDef<BookingRow>[] => [
   { accessorKey: "bookingNumber", header: "رقم الحجز" },
   { accessorKey: "customer", header: "العميل" },
   { accessorKey: "eventType", header: "المناسبة" },
-  { accessorKey: "eventDate", header: "التاريخ", cell: ({ getValue }) => new Date(getValue<string>()).toLocaleDateString("ar-SA") },
+  { accessorKey: "eventDate", header: "التاريخ", cell: ({ getValue }) => fmtDate(getValue<string>()) },
   { accessorKey: "guestCount", header: "الضيوف" },
   {
     accessorKey: "status",

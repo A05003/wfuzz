@@ -1,20 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { D, vat } from "@/lib/money";
 import type { ActionResult } from "./journal";
+import { bookingSchema, type BookingInput } from "@/lib/schemas";
 
-export const bookingSchema = z.object({
-  customerId: z.string().min(1, "اختر العميل"),
-  eventType: z.string().min(1, "نوع المناسبة مطلوب"),
-  eventDate: z.string().min(1, "التاريخ مطلوب"),
-  menuPackage: z.string().min(1, "الباقة مطلوبة"),
-  guestCount: z.coerce.number().int().positive("عدد الضيوف غير صالح"),
-  pricePerGuest: z.string().regex(/^\d+(\.\d{1,2})?$/, "سعر غير صالح"),
-});
-export type BookingInput = z.input<typeof bookingSchema>;
 
 export async function createBooking(input: BookingInput): Promise<ActionResult<{ bookingNumber: string }>> {
   const p = bookingSchema.safeParse(input);

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { createBooking, type BookingInput } from "@/actions/bookings";
+import { createBooking } from "@/actions/bookings";
+import type { BookingInput } from "@/lib/schemas";
 
 export function BookingForm({ customers }: { customers: { id: string; nameAr: string }[] }) {
   const [msg, setMsg] = useState<string | null>(null);
