@@ -1,0 +1,11 @@
+Item Code,Item Name,Item Group,Default Unit of Measure,Maintain Stock
+RICE-BAS,أرز بسمتي,Raw Material,Kg,1
+MEAT-LAMB,لحم غنم,Raw Material,Kg,1
+CHICKEN,دجاج,Raw Material,Kg,1
+OIL-COOK,زيت طبخ,Raw Material,Litre,1
+TOMATO,طماطم,Raw Material,Kg,1
+COFFEE-AR,قهوة عربية,Raw Material,Kg,1
+PLATE-SRV,أطباق تقديم,Consumable,Nos,1
+SVC-WEDDING,خدمة وليمة زفاف (للفرد),Services,Nos,0
+SVC-GRAD,خدمة حفل تخرج (للفرد),Services,Nos,0
+SVC-BUSINESS,خدمة عشاء عمل (للفرد),Services,Nos,0
