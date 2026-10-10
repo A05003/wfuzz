@@ -33,3 +33,10 @@ direct `UPDATE bookings SET status` is rejected. Money columns are system-manage
 - ZATCA: `invoices.zatca_status` is a placeholder; XML/QR generation and submission are not implemented.
 - Kitchen/driver roles can read `bookings` rows including totals (column-level hiding would need a view).
 - No frontend is included yet.
+
+## Web app (`web/`)
+Next.js 14 + Supabase Auth (Arabic/RTL, light/dark by system). `/login` → routed by role to
+`/admin`, `/sales`, `/kitchen`, `/driver`. All writes use the RPC/triggers above, so every booking,
+invoice and ledger entry lands in the tables automatically. See `web/DEPLOY.md`.
+Local: `cd web && cp .env.example .env.local && npm i && npm run dev`.
+Not yet done: language toggle (Arabic only), recipe/inventory admin screens, live testing against a real Supabase project.
