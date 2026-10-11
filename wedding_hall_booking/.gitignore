@@ -1,2 +1,7 @@
 data/
 node_modules/
+web/node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
