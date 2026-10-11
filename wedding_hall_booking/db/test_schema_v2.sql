@@ -153,6 +153,7 @@ BEGIN
     SELECT * INTO r FROM event_settlements WHERE id = st;
     ASSERT r.status = 'finalized' AND r.settled_on_event_day AND r.finalized_by = 2, 'finalized on the event day';
     ASSERT (SELECT status FROM bookings WHERE id = b3) = 'closed', 'contract closed';
+    ASSERT (SELECT severity FROM audit_logs WHERE table_name = 'bookings' AND record_id = b3 AND action_type = 'UPDATE' ORDER BY id DESC LIMIT 1) = 'info', 'normal closure is not flagged';
     PERFORM test_fails(format($q$INSERT INTO booking_services (booking_id, name, quantity, unit_price) VALUES (%s, 'متأخر', 1, 10)$q$, b3), 'can no longer be changed');
     PERFORM test_fails(format($q$INSERT INTO event_expenses (settlement_id, category, description, amount) VALUES (%s, 'other', 'متأخر', 10)$q$, st), 'frozen');
     PERFORM test_fails(format($q$UPDATE bookings SET base_amount = 1 WHERE id = %s$q$, b3), 'frozen');

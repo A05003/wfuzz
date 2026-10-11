@@ -113,6 +113,9 @@ CREATE FUNCTION audit_severity(tbl text, act text, o jsonb, n jsonb) RETURNS tex
         WHEN tbl = 'event_settlements' AND act = 'UPDATE' AND (o->>'status' = 'finalized'
               OR o->>'revenue_override' IS DISTINCT FROM n->>'revenue_override' OR o->>'rental_pct' IS DISTINCT FROM n->>'rental_pct') THEN 'critical'
         WHEN tbl = 'bookings' AND act = 'UPDATE' AND o->>'status' = 'closed' THEN 'critical'
+        -- the normal end of a contract's life (settlement finalized => status closed, nothing else touched) is not suspicious
+        WHEN tbl = 'bookings' AND act = 'UPDATE' AND o->>'status' = 'confirmed' AND n->>'status' = 'closed'
+              AND o->>'base_amount' = n->>'base_amount' AND o->>'discount' = n->>'discount' AND o->>'event_date' = n->>'event_date' AND o->>'hall_id' = n->>'hall_id' THEN 'info'
         WHEN act = 'SOFT_DELETE' AND tbl IN ('bookings','payments','event_expenses','booking_services','event_settlements') THEN 'warning'
         WHEN act = 'UPDATE' AND tbl IN ('bookings','payments','event_expenses','booking_services') THEN 'warning'
         WHEN act = 'RESTORE' THEN 'warning'

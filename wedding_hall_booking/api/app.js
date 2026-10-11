@@ -30,7 +30,8 @@ const SECURITY = {
 
 const parseCookies = (h) => Object.fromEntries(String(h || '').split(/;\s*/).filter(Boolean).map((c) => { const i = c.indexOf('='); return [c.slice(0, i), decodeURIComponent(c.slice(i + 1))]; }));
 const clientIp = (req) => (process.env.TRUST_PROXY === '1' ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() : '') || req.socket.remoteAddress || '';
-const secureCookie = (req) => process.env.COOKIE_SECURE === '1' || (process.env.TRUST_PROXY === '1' && req.headers['x-forwarded-proto'] === 'https');
+// cookies are Secure by default in production (HTTPS is required there); COOKIE_SECURE=0 opts out for a plain-HTTP LAN
+const secureCookie = (req) => process.env.COOKIE_SECURE === '1' || (process.env.COOKIE_SECURE !== '0' && process.env.NODE_ENV === 'production') || (process.env.TRUST_PROXY === '1' && req.headers['x-forwarded-proto'] === 'https');
 
 function send(res, status, body, headers = {}) { res.writeHead(status, { ...SECURITY, ...headers }); res.end(body); }
 const sendJSON = (res, status, obj, extra = {}) => send(res, status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra });

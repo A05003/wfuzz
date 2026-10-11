@@ -2,17 +2,19 @@
   "name": "wedding-hall-booking",
   "version": "1.0.0",
   "private": true,
-  "description": "Wedding & event venue ERP: Node API (PostgreSQL) + Next.js RTL dashboard",
+  "description": "Multi-branch venue & event ERP: Node API (PostgreSQL, JWT, row-level security) + Next.js RTL dashboard",
   "engines": {
     "node": ">=22.5"
   },
   "scripts": {
-    "start": "node api/server.js",
-    "test": "node --test api/test/api.test.js",
-    "start:legacy": "node --disable-warning=ExperimentalWarning server/server.js",
-    "test:legacy": "node --disable-warning=ExperimentalWarning --test server/test/api.test.js",
     "build:web": "npm --prefix web ci && npm --prefix web run build",
-    "test:db": "echo 'psql -v ON_ERROR_STOP=1 -f db/schema_v2.sql -f db/test_schema_v2.sql (on an empty database)'"
+    "start": "node api/server.js",
+    "dev:web": "npm --prefix web run dev",
+    "test": "node --test api/test/api.test.js",
+    "test:db": "psql -v ON_ERROR_STOP=1 -f db/schema_v2.sql -f db/test_schema_v2.sql",
+    "user": "node api/cli.js",
+    "start:legacy": "node --disable-warning=ExperimentalWarning server/server.js",
+    "test:legacy": "node --disable-warning=ExperimentalWarning --test server/test/api.test.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.8",

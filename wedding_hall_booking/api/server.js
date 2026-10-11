@@ -9,8 +9,8 @@ async function main() {
   console.log(`database: ${info.kind}${info.fresh ? ' (initialised)' : ''}`);
   if (info.fresh) {
     const r = await seed();
-    console.log('accounts created: owner (المالك) and manager (مدير القصر)');
-    console.log(`initial password for both (shown once — change it): ${r.password}`);
+    console.log('accounts created: owner (المالك, all branches) · manager (مدير الفرع الرئيسي) · manager.north (مدير فرع الشمال) · supervisor (مشرف ميداني)');
+    console.log(`initial password for all four (shown once — change it): ${r.password}`);
     if (!r.demo) console.log('demo data disabled; set the profit split from the owner dashboard before the first settlement');
   }
   const port = Number(process.env.PORT || 3000), host = process.env.HOST || '127.0.0.1';
