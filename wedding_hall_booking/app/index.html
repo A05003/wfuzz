@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>نظام إدارة قصر الأفراح</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login" class="login hidden">
+  <form id="loginForm" class="login-box">
+    <div class="logo">👑</div>
+    <h2>قصر الأفراح</h2>
+    <label>اسم المستخدم<input name="user" required autofocus placeholder="مثال: أحمد"></label>
+    <label>الفرع
+      <select name="branch"><option>الفرع الرئيسي</option><option>فرع الشمال</option></select>
+    </label>
+    <button class="btn primary" type="submit">دخول</button>
+    <small>نسخة تجريبية: لا توجد كلمة مرور، والبيانات تُحفظ في هذا المتصفح.</small>
+  </form>
+</div>
+
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand"><span>👑</span> قصر الأفراح</div>
+    <nav>
+      <a href="#dashboard" data-route="dashboard">🏠 الرئيسية</a>
+      <a href="#bookings" data-route="bookings">🎉 إشعار / طلب حفلة</a>
+      <a href="#requests" data-route="requests">📋 طلبات المخزون / المشتريات</a>
+      <a href="#orders" data-route="orders">🧾 أمر شراء</a>
+      <a href="#inventory" data-route="inventory">📦 إدارة المخزون</a>
+      <a href="#" id="logout" class="logout">🚪 الخروج</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="user"><span class="avatar" id="avatar"></span>
+        <div><b id="userName"></b><small id="branchName"></small></div></div>
+      <a href="#requests" class="pending" id="pendingBadge" title="طلبات شراء بانتظار الاعتماد">
+        Pending Approvals <span class="count" id="pendingCount">0</span></a>
+    </header>
+    <main id="view"></main>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
