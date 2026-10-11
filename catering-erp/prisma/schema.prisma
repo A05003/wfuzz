@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ChartOfAccount {
+  id        String           @id @default(cuid())
+  code      String           @unique
+  nameAr    String
+  nameEn    String?
+  type      String // ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE
+  balance   String           @default("0") // Decimal serialized (SQLite has no exact decimal)
+  parentId  String?
+  parent    ChartOfAccount?  @relation("AccountTree", fields: [parentId], references: [id])
+  children  ChartOfAccount[] @relation("AccountTree")
+  entries   JournalEntry[]
+  createdAt DateTime         @default(now())
+}
+
+model JournalVoucher {
+  id          String         @id @default(cuid())
+  voucherNo   String         @unique
+  date        DateTime
+  description String
+  totalAmount String
+  createdAt   DateTime       @default(now())
+  entries     JournalEntry[]
+}
+
+model JournalEntry {
+  id          String         @id @default(cuid())
+  voucherId   String
+  voucher     JournalVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     ChartOfAccount @relation(fields: [accountId], references: [id])
+  debit       String         @default("0")
+  credit      String         @default("0")
+  memo        String?
+}
+
+model CustomerVendor {
+  id             String           @id @default(cuid())
+  kind           String // CUSTOMER | VENDOR
+  nameAr         String
+  nameEn         String?
+  vatNumber      String? // 15-digit Saudi TIN
+  accountSubGroup String
+  costCenter     String
+  phone          String?
+  address        String?
+  createdAt      DateTime         @default(now())
+  bookings       CateringBooking[]
+}
+
+model CateringBooking {
+  id            String         @id @default(cuid())
+  bookingNumber String         @unique
+  eventType     String
+  eventDate     DateTime
+  customerId    String
+  customer      CustomerVendor @relation(fields: [customerId], references: [id])
+  status        String         @default("PENDING") // PENDING | CONFIRMED | COMPLETED | CANCELLED
+  seatingList   String? // JSON array
+  menuPackage   String
+  guestCount    Int
+  totalAmount   String
+  createdAt     DateTime       @default(now())
+}
+
+model ExpenseRequest {
+  id          String   @id @default(cuid())
+  requestNo   String   @unique
+  title       String
+  amount      String
+  category    String
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  requestedBy String
+  createdAt   DateTime @default(now())
+}
