@@ -111,3 +111,5 @@ tfoot td{padding:10px;font-weight:700;background:#f8f9fc}
   .form{grid-template-columns:1fr}
   #view{padding:14px}
 }
+
+.login-err{color:var(--bad);min-height:1.2em;font-size:13px}

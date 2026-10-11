@@ -1,0 +1,11 @@
+{
+  "name": "wedding-hall-booking",
+  "version": "1.0.0",
+  "private": true,
+  "description": "نظام إدارة قصر أفراح: خادم REST API وواجهة إدارة (بدون اعتماديات خارجية)",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test server/test/api.test.js"
+  }
+}

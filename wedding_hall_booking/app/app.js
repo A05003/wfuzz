@@ -1,44 +1,38 @@
-/* نظام إدارة قصر الأفراح - واجهة أمامية بدون اعتماديات، البيانات في localStorage */
+/* نظام إدارة قصر الأفراح - الواجهة الأمامية (تتصل بالخادم عبر REST API) */
 'use strict';
 
 const CURRENCY = 'ر.س';
-const STORE_KEY = 'qasr_v1';
-const USER_KEY = 'qasr_user';
+const TOKEN_KEY = 'qasr_token';
 const SECTIONS = { women: 'قسم النساء', men: 'قسم الرجال', both: 'القسمين' };
 const PR_STATUS = { pending: 'بانتظار الاعتماد', approved: 'معتمد', rejected: 'مرفوض', ordered: 'تم الطلب' };
 const PO_STATUS = { ordered: 'تم الطلب', received: 'تم الاستلام' };
 const METHODS = { cash: 'نقدًا', card: 'شبكة', transfer: 'تحويل بنكي' };
 
-/* ---------- data layer ---------- */
-function seed() {
-  const d = (n) => { const t = new Date(); t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); };
-  return {
-    seq: { booking: 1004, pr: 3, po: 1 },
-    bookings: [
-      { id: 1, code: 'B-1001', date: d(3), section: 'women', client: 'عائلة السالم', phone: '0501112233', amount: 18000, services: [{ name: 'كوشة', price: 2500 }], payments: [{ no: 'R-1', date: d(-20), amount: 6000, method: 'cash', note: 'عربون' }], status: 'active' },
-      { id: 2, code: 'B-1002', date: d(3), section: 'men', client: 'عائلة السالم', phone: '0501112233', amount: 12000, services: [], payments: [{ no: 'R-2', date: d(-20), amount: 12000, method: 'transfer', note: '' }], status: 'active' },
-      { id: 3, code: 'B-1003', date: d(10), section: 'both', client: 'شركة النور', phone: '0555556677', amount: 35000, services: [{ name: 'تنسيق ورد', price: 3000 }], payments: [{ no: 'R-3', date: d(-5), amount: 10000, method: 'card', note: 'عربون' }], status: 'active' },
-    ],
-    receiptSeq: 3,
-    inventory: [
-      { id: 1, name: 'كراسي', unit: 'قطعة', qty: 600, min: 400 },
-      { id: 2, name: 'مفارش طاولات', unit: 'قطعة', qty: 45, min: 60 },
-      { id: 3, name: 'مياه شرب', unit: 'كرتون', qty: 120, min: 80 },
-      { id: 4, name: 'ورد صناعي', unit: 'حزمة', qty: 30, min: 20 },
-    ],
-    requests: [
-      { id: 1, code: 'PR-1', itemId: 2, qty: 40, note: 'نقص مفارش', status: 'pending', date: d(-1) },
-      { id: 2, code: 'PR-2', itemId: 3, qty: 50, note: '', status: 'approved', date: d(-2) },
-    ],
-    orders: [],
-  };
+/* ---------- API layer ---------- */
+let db = { bookings: [], inventory: [], requests: [], orders: [] };
+let me = null; // المستخدم الحالي مع صلاحياته
+const can = (perm) => !!me && me.perms.includes(perm);
+const getToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; } };
+const setToken = (t) => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) { /* storage unavailable */ } };
+
+async function api(method, url, body) {
+  const headers = { Accept: 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const t = getToken(); if (t) headers.Authorization = 'Bearer ' + t;
+  let res;
+  try { res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }); }
+  catch (e) { throw new Error('تعذر الاتصال بالخادم'); }
+  let data = {}; try { data = await res.json(); } catch (e) { /* empty body */ }
+  if (res.status === 401 && url !== '/api/login') { forceLogout(); throw new Error(data.error || 'انتهت الجلسة'); }
+  if (!res.ok) throw new Error(data.error || 'حدث خطأ غير متوقع');
+  return data;
 }
-let db;
-function load() {
-  try { db = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { db = null; }
-  if (!db || !db.bookings) { db = seed(); save(); }
+async function reload() { db = await api('GET', '/api/state'); render(); }
+/* ينفذ طلبًا ثم يحدّث البيانات؛ يعرض الخطأ داخل النافذة إن وُجد موضعه وإلا كتنبيه */
+async function mutate(fn, okMsg) {
+  try { const r = await fn(); await reload(); if (okMsg) toast(okMsg); return r || true; }
+  catch (e) { const box = $('#err'); if (box) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; else toast(e.message); return false; }
 }
-function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) { /* storage unavailable */ } }
 
 /* ---------- helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -57,11 +51,6 @@ function toast(msg) {
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
-/* منع الحجز المزدوج: نفس اليوم مع تداخل الأقسام (القسمين يتعارض مع أي قسم) */
-function findConflict(date, section, excludeId) {
-  return db.bookings.find((b) => b.id !== excludeId && b.status !== 'cancelled' && b.date === date &&
-    (b.section === 'both' || section === 'both' || b.section === section));
-}
 
 /* ---------- modal ---------- */
 function openModal(title, body, mount) {
@@ -133,7 +122,7 @@ const views = {
 
   bookings() {
     const cols = [
-      { title: 'تعديل / طباعة', html: (b) => `<button class="btn sm" data-act="edit" data-id="${b.id}">✏️ تعديل</button> <button class="btn sm" data-act="print" data-id="${b.id}">🖨️ طباعة</button>` },
+      { title: 'تعديل / طباعة', html: (b) => `${can('booking.write') || can('payment.write') ? `<button class="btn sm" data-act="edit" data-id="${b.id}">✏️ تعديل</button> ` : ''}<button class="btn sm" data-act="print" data-id="${b.id}">🖨️ طباعة</button>` },
       { key: 'code', title: 'الكود / رقم الطلب', filter: true, text: (b) => b.code, html: (b) => `<b>${esc(b.code)}</b>` },
       { key: 'date', title: 'تاريخ الحفلة', filter: true, text: (b) => b.date, html: (b) => esc(b.date) },
       { key: 'section', title: 'القسم (S-Type)', filter: true, options: SECTIONS, raw: (b) => b.section, html: (b) => `<span class="tag ${b.section}">${SECTIONS[b.section]}</span>` },
@@ -145,27 +134,27 @@ const views = {
     const footer = (rows) => `<tfoot><tr><td colspan="5">الإجمالي (${rows.length})</td><td class="num">${money(sum(rows, (b) => totals(b).invoice))}</td><td class="num">${money(sum(rows, (b) => totals(b).received))}</td><td class="num">${money(sum(rows, (b) => totals(b).due))}</td></tr></tfoot>`;
     const rows = db.bookings.filter((b) => b.status !== 'cancelled').sort((a, b) => b.id - a.id);
     return `<h1>إشعار / طلب حفلة</h1>
-      <div class="toolbar"><button class="btn primary" data-act="new">＋ طلب جديد</button><button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
+      <div class="toolbar">${can('booking.write') ? '<button class="btn primary" data-act="new">＋ طلب جديد</button>' : ''}<button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
       ${gridHTML('bookings', cols, rows, footer)}`;
   },
 
   inventory() {
     const cols = [
-      { title: 'إجراء', html: (i) => `<button class="btn sm" data-act="adjust" data-id="${i.id}">± تعديل الكمية</button>` },
+      { title: 'إجراء', html: (i) => can('inventory.write') ? `<button class="btn sm" data-act="adjust" data-id="${i.id}">± تعديل الكمية</button>` : '' },
       { key: 'name', title: 'الصنف', filter: true, text: (i) => i.name, html: (i) => esc(i.name) },
       { key: 'unit', title: 'الوحدة', filter: true, text: (i) => i.unit, html: (i) => esc(i.unit) },
       { key: 'qty', title: 'الكمية', num: true, filter: true, text: (i) => i.qty, html: (i) => `<span class="${i.qty < i.min ? 'due-pos' : ''}">${i.qty}</span>` },
       { key: 'min', title: 'الحد الأدنى', num: true, text: (i) => i.min, html: (i) => i.min },
     ];
     return `<h1>إدارة المخزون</h1>
-      <div class="toolbar"><button class="btn primary" data-act="new">＋ صنف جديد</button><button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
+      <div class="toolbar">${can('inventory.write') ? '<button class="btn primary" data-act="new">＋ صنف جديد</button>' : ''}<button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
       ${gridHTML('inventory', cols, db.inventory)}`;
   },
 
   requests() {
     const item = (r) => db.inventory.find((i) => i.id === r.itemId) || { name: '—', unit: '' };
     const cols = [
-      { title: 'إجراء', html: (r) => r.status === 'pending' ? `<button class="btn sm ok" data-act="approve" data-id="${r.id}">اعتماد</button> <button class="btn sm bad" data-act="reject" data-id="${r.id}">رفض</button>` : '' },
+      { title: 'إجراء', html: (r) => r.status === 'pending' && can('request.approve') ? `<button class="btn sm ok" data-act="approve" data-id="${r.id}">اعتماد</button> <button class="btn sm bad" data-act="reject" data-id="${r.id}">رفض</button>` : '' },
       { key: 'code', title: 'رقم الطلب', filter: true, text: (r) => r.code, html: (r) => `<b>${esc(r.code)}</b>` },
       { key: 'date', title: 'التاريخ', filter: true, text: (r) => r.date, html: (r) => esc(r.date) },
       { key: 'item', title: 'الصنف', filter: true, text: (r) => item(r).name, html: (r) => esc(item(r).name) },
@@ -174,7 +163,7 @@ const views = {
       { key: 'status', title: 'الحالة', filter: true, options: PR_STATUS, raw: (r) => r.status, html: (r) => `<span class="tag ${r.status}">${PR_STATUS[r.status]}</span>` },
     ];
     return `<h1>طلبات المخزون / المشتريات</h1>
-      <div class="toolbar"><button class="btn primary" data-act="new">＋ طلب جديد</button><button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
+      <div class="toolbar">${can('request.create') ? '<button class="btn primary" data-act="new">＋ طلب جديد</button>' : ''}<button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
       ${gridHTML('requests', cols, [...db.requests].reverse())}`;
   },
 
@@ -182,7 +171,7 @@ const views = {
     const req = (o) => db.requests.find((r) => r.id === o.requestId);
     const item = (o) => { const r = req(o); return r ? db.inventory.find((i) => i.id === r.itemId) : null; };
     const cols = [
-      { title: 'إجراء', html: (o) => o.status === 'ordered' ? `<button class="btn sm ok" data-act="receive" data-id="${o.id}">استلام للمخزون</button>` : '' },
+      { title: 'إجراء', html: (o) => o.status === 'ordered' && can('order.write') ? `<button class="btn sm ok" data-act="receive" data-id="${o.id}">استلام للمخزون</button>` : '' },
       { key: 'code', title: 'رقم الأمر', filter: true, text: (o) => o.code, html: (o) => `<b>${esc(o.code)}</b>` },
       { key: 'req', title: 'الطلب', text: (o) => req(o)?.code || '', html: (o) => esc(req(o)?.code || '—') },
       { key: 'item', title: 'الصنف', filter: true, text: (o) => item(o)?.name || '', html: (o) => `${esc(item(o)?.name || '—')} × ${req(o)?.qty || 0}` },
@@ -191,7 +180,7 @@ const views = {
       { key: 'status', title: 'الحالة', filter: true, options: PO_STATUS, raw: (o) => o.status, html: (o) => `<span class="tag ${o.status}">${PO_STATUS[o.status]}</span>` },
     ];
     return `<h1>أمر شراء</h1>
-      <div class="toolbar"><button class="btn primary" data-act="new">＋ أمر شراء جديد</button><button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
+      <div class="toolbar">${can('order.write') ? '<button class="btn primary" data-act="new">＋ أمر شراء جديد</button>' : ''}<button class="btn" data-act="refresh">⟳ تحديث Refresh</button></div>
       ${gridHTML('orders', cols, [...db.orders].reverse())}`;
   },
 };
@@ -210,89 +199,86 @@ function onHash() { route = location.hash.slice(1) || 'dashboard'; render(); }
 window.addEventListener('hashchange', onHash);
 
 /* ---------- actions (event delegation) ---------- */
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-act]'); if (!btn) return;
   const id = Number(btn.dataset.id); const act = btn.dataset.act;
-  if (act === 'refresh') { load(); render(); toast('تم التحديث'); return; }
+  if (act === 'refresh') { try { await reload(); toast('تم التحديث'); } catch (err) { toast(err.message); } return; }
   const handler = actions[route]?.[act]; if (handler) handler(id);
 });
 
+const formData = (form) => Object.fromEntries(new FormData(form));
+/* يربط نموذجًا بدالة إرسال ويمنع النقر المزدوج أثناء الانتظار */
+function onSubmit(form, fn) {
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const b = form.querySelector('button.primary'); if (b) b.disabled = true;
+    try { await fn(formData(form)); } finally { if (b && b.isConnected) b.disabled = false; }
+  });
+}
+const FORM_END = '<div class="form-actions full"><button class="btn primary">حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div>';
+
 const actions = {
   bookings: {
+    new: () => newBooking(),
     edit: (id) => editModal(id),
     print: (id) => printModal(id),
   },
   inventory: {
     new() {
-      openModal('صنف جديد', `<form class="form" id="f">
+      openModal('صنف جديد', `<div id="err"></div><form class="form" id="f">
         <label class="full">اسم الصنف<input name="name" required></label>
         <label>الوحدة<input name="unit" required value="قطعة"></label>
-        <label>الكمية الحالية<input name="qty" type="number" min="0" value="0" required></label>
-        <label>الحد الأدنى<input name="min" type="number" min="0" value="0" required></label>
-        <div class="form-actions full"><button class="btn primary">حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></form>`,
-      (m) => $('#f', m).addEventListener('submit', (ev) => {
-        ev.preventDefault(); const f = new FormData(ev.target);
-        db.inventory.push({ id: Date.now(), name: f.get('name').trim(), unit: f.get('unit').trim(), qty: +f.get('qty'), min: +f.get('min') });
-        save(); closeModal(); render(); toast('تمت إضافة الصنف');
+        <label>الكمية الحالية<input name="qty" type="number" min="0" step="1" value="0" required></label>
+        <label>الحد الأدنى<input name="min" type="number" min="0" step="1" value="0" required></label>${FORM_END}</form>`,
+      (m) => onSubmit($('#f', m), async (f) => {
+        if (await mutate(() => api('POST', '/api/inventory', { name: f.name, unit: f.unit, qty: +f.qty, min: +f.min }), 'تمت إضافة الصنف')) closeModal();
       }));
     },
     adjust(id) {
-      const it = db.inventory.find((i) => i.id === id);
-      openModal(`تعديل كمية: ${it.name}`, `<form class="form" id="f">
+      const it = db.inventory.find((i) => i.id === id); if (!it) return;
+      openModal(`تعديل كمية: ${it.name}`, `<div id="err"></div><form class="form" id="f">
         <label class="full">الكمية الحالية: <b>${it.qty} ${esc(it.unit)}</b></label>
-        <label>الإضافة / الخصم (سالب للخصم)<input name="delta" type="number" required value="0"></label>
-        <label>الحد الأدنى<input name="min" type="number" min="0" value="${it.min}" required></label>
-        <div class="form-actions full"><button class="btn primary">حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></form>`,
-      (m) => $('#f', m).addEventListener('submit', (ev) => {
-        ev.preventDefault(); const f = new FormData(ev.target); const nq = it.qty + (+f.get('delta'));
-        if (nq < 0) { toast('الكمية لا يمكن أن تكون سالبة'); return; }
-        it.qty = nq; it.min = +f.get('min'); save(); closeModal(); render(); toast('تم تحديث المخزون');
+        <label>الإضافة / الخصم (سالب للخصم)<input name="delta" type="number" step="1" required value="0"></label>
+        <label>الحد الأدنى<input name="min" type="number" min="0" step="1" value="${it.min}" required></label>${FORM_END}</form>`,
+      (m) => onSubmit($('#f', m), async (f) => {
+        if (await mutate(() => api('POST', `/api/inventory/${id}/adjust`, { delta: +f.delta, min: +f.min }), 'تم تحديث المخزون')) closeModal();
       }));
     },
   },
   requests: {
     new() {
-      openModal('طلب مشتريات / مخزون', `<form class="form" id="f">
+      openModal('طلب مشتريات / مخزون', `<div id="err"></div><form class="form" id="f">
         <label class="full">الصنف<select name="item">${db.inventory.map((i) => `<option value="${i.id}">${esc(i.name)} (المتوفر ${i.qty})</option>`).join('')}</select></label>
-        <label>الكمية المطلوبة<input name="qty" type="number" min="1" required></label>
+        <label>الكمية المطلوبة<input name="qty" type="number" min="1" step="1" required></label>
         <label>ملاحظات<input name="note"></label>
         <div class="form-actions full"><button class="btn primary">إرسال للاعتماد</button><button type="button" class="btn" data-close>إلغاء</button></div></form>`,
-      (m) => $('#f', m).addEventListener('submit', (ev) => {
-        ev.preventDefault(); const f = new FormData(ev.target);
-        db.requests.push({ id: Date.now(), code: 'PR-' + (++db.seq.pr), itemId: +f.get('item'), qty: +f.get('qty'), note: f.get('note').trim(), status: 'pending', date: today() });
-        save(); closeModal(); render(); toast('تم إرسال الطلب للاعتماد');
+      (m) => onSubmit($('#f', m), async (f) => {
+        if (await mutate(() => api('POST', '/api/requests', { itemId: +f.item, qty: +f.qty, note: f.note }), 'تم إرسال الطلب للاعتماد')) closeModal();
       }));
     },
-    approve(id) { db.requests.find((r) => r.id === id).status = 'approved'; save(); render(); toast('تم اعتماد الطلب'); },
-    reject(id) { db.requests.find((r) => r.id === id).status = 'rejected'; save(); render(); toast('تم رفض الطلب'); },
+    approve: (id) => mutate(() => api('POST', `/api/requests/${id}/approve`), 'تم اعتماد الطلب'),
+    reject: (id) => mutate(() => api('POST', `/api/requests/${id}/reject`), 'تم رفض الطلب'),
   },
   orders: {
     new() {
       const open = db.requests.filter((r) => r.status === 'approved');
       if (!open.length) { toast('لا توجد طلبات معتمدة لإصدار أمر شراء'); return; }
-      openModal('أمر شراء جديد', `<form class="form" id="f">
+      openModal('أمر شراء جديد', `<div id="err"></div><form class="form" id="f">
         <label class="full">الطلب المعتمد<select name="req">${open.map((r) => { const i = db.inventory.find((x) => x.id === r.itemId); return `<option value="${r.id}">${esc(r.code)} — ${esc(i?.name || '')} × ${r.qty}</option>`; }).join('')}</select></label>
         <label>المورد<input name="supplier" required></label>
         <label>التكلفة (${CURRENCY})<input name="cost" type="number" min="0" step="0.01" required></label>
         <div class="form-actions full"><button class="btn primary">إصدار الأمر</button><button type="button" class="btn" data-close>إلغاء</button></div></form>`,
-      (m) => $('#f', m).addEventListener('submit', (ev) => {
-        ev.preventDefault(); const f = new FormData(ev.target); const rid = +f.get('req');
-        db.orders.push({ id: Date.now(), code: 'PO-' + (++db.seq.po), requestId: rid, supplier: f.get('supplier').trim(), cost: +f.get('cost'), status: 'ordered' });
-        db.requests.find((r) => r.id === rid).status = 'ordered';
-        save(); closeModal(); render(); toast('تم إصدار أمر الشراء');
+      (m) => onSubmit($('#f', m), async (f) => {
+        if (await mutate(() => api('POST', '/api/orders', { requestId: +f.req, supplier: f.supplier, cost: +f.cost }), 'تم إصدار أمر الشراء')) closeModal();
       }));
     },
-    receive(id) {
-      const o = db.orders.find((x) => x.id === id); const r = db.requests.find((x) => x.id === o.requestId);
-      const it = r && db.inventory.find((i) => i.id === r.itemId);
-      if (it) it.qty += r.qty;
-      o.status = 'received'; save(); render(); toast('تم الاستلام وتحديث المخزون');
-    },
+    receive: (id) => mutate(() => api('POST', `/api/orders/${id}/receive`), 'تم الاستلام وتحديث المخزون'),
   },
 };
 
 /* ---------- bookings: new / edit / print ---------- */
 function sectionOptions(sel) { return Object.entries(SECTIONS).map(([k, v]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${v}</option>`).join(''); }
+const methodOptions = () => Object.entries(METHODS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 
 function bookingForm(b) {
   const isNew = !b;
@@ -303,80 +289,68 @@ function bookingForm(b) {
     <label>القسم<select name="section">${sectionOptions(b?.section || 'both')}</select></label>
     <label>قيمة العقد (${CURRENCY})<input name="amount" type="number" min="0" step="0.01" required value="${b?.amount ?? ''}"></label>
     ${isNew ? `<label>العربون المستلم (اختياري)<input name="deposit" type="number" min="0" step="0.01" value="0"></label>
-    <label>طريقة الدفع<select name="method">${Object.entries(METHODS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>` : ''}
+    <label>طريقة الدفع<select name="method">${methodOptions()}</select></label>` : ''}
     <div class="form-actions full"><button class="btn primary">${isNew ? 'حفظ الحجز' : 'حفظ التعديلات'}</button><button type="button" class="btn" data-close>إلغاء</button></div>
   </form>`;
 }
 
-function readBooking(form, excludeId) {
-  const f = new FormData(form); const err = $('#err');
-  const data = { client: f.get('client').trim(), phone: f.get('phone').trim(), date: f.get('date'), section: f.get('section'), amount: +f.get('amount') };
-  const c = findConflict(data.date, data.section, excludeId);
-  if (c) {
-    err.innerHTML = `<div class="err">⚠️ لا يمكن الحجز: يوجد حجز <b>${esc(c.code)}</b> (${SECTIONS[c.section]} — ${esc(c.client)}) في نفس اليوم ويتعارض مع هذا القسم.</div>`;
-    return null;
-  }
-  err.innerHTML = ''; return { data, f };
+function newBooking() {
+  openModal('طلب حفلة جديد', bookingForm(), (m) => onSubmit($('#f', m), async (f) => {
+    const body = { client: f.client, phone: f.phone, date: f.date, section: f.section, amount: +f.amount, deposit: +f.deposit || 0, method: f.method };
+    const r = await mutate(() => api('POST', '/api/bookings', body));
+    if (r) { closeModal(); toast('تم حفظ الحجز: ' + r.booking.code); }
+  }));
 }
 
-actions.bookings.new = () => {
-  openModal('طلب حفلة جديد', bookingForm(), (m) => $('#f', m).addEventListener('submit', (ev) => {
-    ev.preventDefault();
-    const r = readBooking(ev.target); if (!r) return;
-    const dep = +r.f.get('deposit');
-    if (dep > r.data.amount) { $('#err').innerHTML = '<div class="err">العربون أكبر من قيمة العقد</div>'; return; }
-    const b = { id: Date.now(), code: 'B-' + (++db.seq.booking), ...r.data, services: [], payments: [], status: 'active' };
-    if (dep > 0) b.payments.push({ no: 'R-' + (++db.receiptSeq), date: today(), amount: dep, method: r.f.get('method'), note: 'عربون' });
-    db.bookings.push(b); save(); closeModal(); render(); toast('تم حفظ الحجز: ' + b.code);
-  }));
-};
-
-function editModal(id, tab = 'pay') {
-  const b = db.bookings.find((x) => x.id === id); const t = totals(b);
-  const tabs = { pay: 'دفعة جديدة (سند قبض)', svc: 'خدمات تنسيق وديكور', data: 'بيانات العقد' };
+function editModal(id, tab) {
+  const b = db.bookings.find((x) => x.id === id); if (!b) { closeModal(); return; }
+  const t = totals(b);
+  const tabs = {};
+  if (can('payment.write')) tabs.pay = 'دفعة جديدة (سند قبض)';
+  if (can('booking.write')) { tabs.svc = 'خدمات تنسيق وديكور'; tabs.data = 'بيانات العقد'; }
+  tab = tabs[tab] ? tab : Object.keys(tabs)[0];
+  if (!tab) return;
   let body = `<div class="summary"><span>العقد: <b>${money(t.invoice)}</b></span><span>المستلم: <b style="color:var(--ok)">${money(t.received)}</b></span><span>المتبقي: <b class="${t.due > 0 ? 'due-pos' : 'due-zero'}">${money(t.due)}</b></span></div>
     <div class="tabs">${Object.entries(tabs).map(([k, v]) => `<button type="button" data-tab="${k}" class="${k === tab ? 'active' : ''}">${v}</button>`).join('')}</div>`;
   if (tab === 'pay') {
     body += `<div id="err"></div><form class="form" id="f">
       <label>المبلغ (${CURRENCY})<input name="amount" type="number" min="0.01" step="0.01" max="${Math.max(t.due, 0)}" required value="${t.due > 0 ? t.due : ''}"></label>
-      <label>طريقة الدفع<select name="method">${Object.entries(METHODS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+      <label>طريقة الدفع<select name="method">${methodOptions()}</select></label>
       <label class="full">ملاحظة<input name="note"></label>
       <div class="form-actions full"><button class="btn primary" ${t.due <= 0 ? 'disabled' : ''}>تسجيل الدفعة</button></div></form>
       ${b.payments.length ? `<table class="mini"><tr><th>السند</th><th>التاريخ</th><th>المبلغ</th><th>الطريقة</th></tr>${b.payments.map((p) => `<tr><td>${esc(p.no)}</td><td>${esc(p.date)}</td><td>${money(p.amount)}</td><td>${METHODS[p.method] || ''}</td></tr>`).join('')}</table>` : ''}`;
   } else if (tab === 'svc') {
-    body += `<form class="form" id="f">
+    body += `<div id="err"></div><form class="form" id="f">
       <label>الخدمة<input name="name" list="svcs" required placeholder="كوشة، ورد، إنارة..."></label>
       <label>السعر (${CURRENCY})<input name="price" type="number" min="0" step="0.01" required></label>
       <datalist id="svcs"><option>كوشة</option><option>تنسيق ورد</option><option>إضاءة</option><option>ممر العروس</option><option>طاولات ضيافة</option></datalist>
       <div class="form-actions full"><button class="btn primary">إضافة الخدمة</button></div></form>
-      ${b.services.length ? `<table class="mini"><tr><th>الخدمة</th><th>السعر</th><th></th></tr>${b.services.map((s, i) => `<tr><td>${esc(s.name)}</td><td>${money(s.price)}</td><td><button class="btn sm bad" data-del="${i}">حذف</button></td></tr>`).join('')}</table>` : ''}`;
+      ${b.services.length ? `<table class="mini"><tr><th>الخدمة</th><th>السعر</th><th></th></tr>${b.services.map((s) => `<tr><td>${esc(s.name)}</td><td>${money(s.price)}</td><td><button class="btn sm bad" data-del="${s.id}">حذف</button></td></tr>`).join('')}</table>` : ''}`;
   } else {
     body += bookingForm(b) + `<div class="form-actions"><button type="button" class="btn bad" id="cancelBooking">إلغاء الحجز</button></div>`;
   }
   openModal(`${b.code} — ${b.client}`, body, (m) => {
     m.querySelectorAll('[data-tab]').forEach((x) => x.addEventListener('click', () => editModal(id, x.dataset.tab)));
     const form = $('#f', m);
-    if (tab === 'pay') form.addEventListener('submit', (ev) => {
-      ev.preventDefault(); const f = new FormData(ev.target); const amt = +f.get('amount');
-      if (amt > totals(b).due) { $('#err').innerHTML = '<div class="err">المبلغ أكبر من المتبقي</div>'; return; }
-      const p = { no: 'R-' + (++db.receiptSeq), date: today(), amount: amt, method: f.get('method'), note: f.get('note').trim() };
-      b.payments.push(p); save(); render(); toast('تم تسجيل السند ' + p.no); editModal(id, 'pay');
+    if (tab === 'pay') onSubmit(form, async (f) => {
+      if (await mutate(() => api('POST', `/api/bookings/${id}/payments`, { amount: +f.amount, method: f.method, note: f.note }), 'تم تسجيل السند')) editModal(id, 'pay');
     });
     if (tab === 'svc') {
-      form.addEventListener('submit', (ev) => {
-        ev.preventDefault(); const f = new FormData(ev.target);
-        b.services.push({ name: f.get('name').trim(), price: +f.get('price') }); save(); render(); toast('تمت إضافة الخدمة'); editModal(id, 'svc');
+      onSubmit(form, async (f) => {
+        if (await mutate(() => api('POST', `/api/bookings/${id}/services`, { name: f.name, price: +f.price }), 'تمت إضافة الخدمة')) editModal(id, 'svc');
       });
-      m.querySelectorAll('[data-del]').forEach((x) => x.addEventListener('click', () => { b.services.splice(+x.dataset.del, 1); save(); render(); editModal(id, 'svc'); }));
+      m.querySelectorAll('[data-del]').forEach((x) => x.addEventListener('click', async () => {
+        if (await mutate(() => api('DELETE', `/api/bookings/${id}/services/${x.dataset.del}`))) editModal(id, 'svc');
+      }));
     }
     if (tab === 'data') {
-      form.addEventListener('submit', (ev) => {
-        ev.preventDefault(); const r = readBooking(ev.target, b.id); if (!r) return;
-        Object.assign(b, r.data); save(); closeModal(); render(); toast('تم حفظ التعديلات');
+      onSubmit(form, async (f) => {
+        const body = { client: f.client, phone: f.phone, date: f.date, section: f.section, amount: +f.amount };
+        if (await mutate(() => api('PUT', `/api/bookings/${id}`, body), 'تم حفظ التعديلات')) closeModal();
       });
-      $('#cancelBooking', m).addEventListener('click', () => {
+      $('#cancelBooking', m).addEventListener('click', async () => {
         if (!confirm('هل أنت متأكد من إلغاء الحجز؟ سيتحرر الموعد.')) return;
-        b.status = 'cancelled'; save(); closeModal(); render(); toast('تم إلغاء الحجز');
+        if (await mutate(() => api('POST', `/api/bookings/${id}/cancel`), 'تم إلغاء الحجز')) closeModal();
       });
     }
   });
@@ -399,7 +373,7 @@ function printModal(id) {
 }
 
 function buildDoc(b, doc, payNo) {
-  const t = totals(b); const branch = localStorage.getItem(USER_KEY) ? JSON.parse(localStorage.getItem(USER_KEY)).branch : '';
+  const t = totals(b); const branch = me ? me.branch : '';
   const head = (title) => `<div class="h"><h1>قصر الأفراح</h1><div>${esc(branch)}</div><h2>${title}</h2></div>
     <table class="kv"><tr><td>رقم الحجز</td><td>${esc(b.code)}</td><td>التاريخ</td><td>${esc(b.date)}</td></tr>
     <tr><td>العميل / الجهة</td><td>${esc(b.client)}</td><td>الجوال</td><td>${esc(b.phone)}</td></tr>
@@ -442,21 +416,36 @@ function printHTML(inner) {
   setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(() => fr.remove(), 1500); }, 150);
 }
 
+
 /* ---------- login / boot ---------- */
-function getUser() { try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch (e) { return null; } }
-function showApp() {
-  const u = getUser();
-  $('#login').classList.toggle('hidden', !!u); $('#app').classList.toggle('hidden', !u);
-  if (!u) return;
-  $('#userName').textContent = u.user; $('#branchName').textContent = u.branch; $('#avatar').textContent = u.user.slice(0, 1);
+function showLogin(msg) {
+  $('#login').classList.remove('hidden'); $('#app').classList.add('hidden');
+  $('#loginErr').textContent = msg || '';
+}
+function forceLogout() { setToken(null); me = null; showLogin('انتهت الجلسة، سجّل الدخول من جديد'); }
+
+async function enter() {
+  try {
+    me = (await api('GET', '/api/me')).user;
+    db = await api('GET', '/api/state');
+  } catch (e) { if (getToken()) setToken(null); return showLogin(); }
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
+  $('#userName').textContent = me.name; $('#branchName').textContent = me.branch; $('#avatar').textContent = me.name.slice(0, 1);
   onHash();
 }
-$('#loginForm').addEventListener('submit', (e) => {
-  e.preventDefault(); const f = new FormData(e.target);
-  try { localStorage.setItem(USER_KEY, JSON.stringify({ user: f.get('user').trim(), branch: f.get('branch') })); } catch (err) { /* ignore */ }
-  showApp();
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); const f = formData(e.target); const btn = e.target.querySelector('button');
+  btn.disabled = true;
+  try {
+    const r = await api('POST', '/api/login', { username: f.user, password: f.password });
+    setToken(r.token); e.target.reset(); await enter();
+  } catch (err) { $('#loginErr').textContent = err.message; }
+  finally { btn.disabled = false; }
 });
-$('#logout').addEventListener('click', (e) => { e.preventDefault(); try { localStorage.removeItem(USER_KEY); } catch (err) { /* ignore */ } location.hash = ''; showApp(); });
+$('#logout').addEventListener('click', async (e) => {
+  e.preventDefault();
+  try { await api('POST', '/api/logout'); } catch (err) { /* ignore */ }
+  setToken(null); me = null; location.hash = ''; showLogin();
+});
 
-load();
-showApp();
+enter();

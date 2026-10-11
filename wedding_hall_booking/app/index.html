@@ -12,12 +12,10 @@
   <form id="loginForm" class="login-box">
     <div class="logo">👑</div>
     <h2>قصر الأفراح</h2>
-    <label>اسم المستخدم<input name="user" required autofocus placeholder="مثال: أحمد"></label>
-    <label>الفرع
-      <select name="branch"><option>الفرع الرئيسي</option><option>فرع الشمال</option></select>
-    </label>
+    <label>اسم المستخدم<input name="user" required autofocus autocomplete="username"></label>
+    <label>كلمة المرور<input name="password" type="password" required autocomplete="current-password"></label>
+    <div id="loginErr" class="login-err" role="alert"></div>
     <button class="btn primary" type="submit">دخول</button>
-    <small>نسخة تجريبية: لا توجد كلمة مرور، والبيانات تُحفظ في هذا المتصفح.</small>
   </form>
 </div>
 
