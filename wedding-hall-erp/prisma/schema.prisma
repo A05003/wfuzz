@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id    String @id @default(uuid())
+  name  String @unique // "ADMIN" | "ACCOUNTANT" | "SALES"
+  label String // الاسم العربي
+  users User[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @relation(fields: [roleId], references: [id])
+  roleId       String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
