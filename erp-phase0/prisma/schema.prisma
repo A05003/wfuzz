@@ -1,0 +1,9 @@
+// Phase 0: لا توجد Models بعد. تُضاف مع المراحل القادمة عبر Migrations.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
